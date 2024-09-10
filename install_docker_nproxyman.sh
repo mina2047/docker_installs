@@ -3,36 +3,31 @@
 installApps()
 {
     clear
-    OS="$REPLY" ## <-- This $REPLY is about OS Selection
     echo "We can install Docker-CE, Docker-Compose, NGinX Proxy Manager, and Portainer-CE."
     echo "Please select 'y' for each item you would like to install."
     echo "NOTE: Without Docker you cannot use Docker-Compose, NGinx Proxy Manager, or Portainer-CE."
-    echo "       You also must have Docker-Compose for NGinX Proxy Manager to be installed."
-    echo ""
+    echo "      You also must have Docker-Compose for NGinX Proxy Manager to be installed."
     echo ""
     
     ISACT=$( (sudo systemctl is-active docker ) 2>&1 )
-    ISCOMP=$( (docker-compose -v ) 2>&1 )
+    ISCOMP=$( (docker compose version ) 2>&1 )
 
-    #### Try to check whether docker is installed and running - don't prompt if it is
+    #### Check whether Docker is installed and running
     if [[ "$ISACT" != "active" ]]; then
         read -rp "Docker-CE (y/n): " DOCK
     else
         echo "Docker appears to be installed and running."
-        echo ""
         echo ""
     fi
 
     if [[ "$ISCOMP" == *"command not found"* ]]; then
         read -rp "Docker-Compose (y/n): " DCOMP
     else
-        echo "Docker-compose appears to be installed."
-        echo ""
+        echo "Docker Compose appears to be installed."
         echo ""
     fi
 
     read -rp "NGinX Proxy Manager (y/n): " NPM
-    read -rp "Navidrome (y/n): " NAVID
     read -rp "Portainer-CE (y/n): " PTAIN
 
     if [[ "$PTAIN" == [yY] ]]; then
@@ -66,207 +61,68 @@ startInstall()
     echo ""
     sleep 3s
 
-    #######################################################
-    ###           Install for Debian / Ubuntu           ###
-    #######################################################
+    echo "    1. Installing System Updates... this may take a while...be patient."
+    (sudo apt update && sudo apt upgrade -y) > ~/docker-script-install.log 2>&1 &
+    ## Show a spinner for activity progress
+    pid=$! # Process Id of the previous running command
+    spin='-\|/'
+    i=0
+    while kill -0 $pid 2>/dev/null
+    do
+        i=$(( (i+1) %4 ))
+        printf "\r${spin:$i:1}"
+        sleep .1
+    done
+    printf "\r"
 
-    if [[ "$OS" != "1" ]]; then
-        echo "    1. Installing System Updates... this may take a while...be patient. If it is being done on a Digial Ocean VPS, you should run updates before running this script."
-        (sudo apt update && sudo apt upgrade -y) > ~/docker-script-install.log 2>&1 &
-        ## Show a spinner for activity progress
-        pid=$! # Process Id of the previous running command
-        spin='-\|/'
-        i=0
-        while kill -0 $pid 2>/dev/null
-        do
-            i=$(( (i+1) %4 ))
-            printf "\r${spin:$i:1}"
-            sleep .1
-        done
-        printf "\r"
+    echo "    2. Install Prerequisite Packages..."
+    sleep 2s
 
-        echo "    2. Install Prerequisite Packages..."
-        sleep 2s
+    sudo apt install -y curl wget git ca-certificates lsb-release gnupg >> ~/docker-script-install.log 2>&1
 
-        sudo apt install curl wget git -y >> ~/docker-script-install.log 2>&1
+    echo "    3. Installing Docker-CE (Community Edition)..."
+    sleep 2s
 
-        echo "    3. Installing Docker-CE (Community Edition)..."
-        sleep 2s
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io >> ~/docker-script-install.log 2>&1
 
-        curl -fsSL https://get.docker.com | sh >> ~/docker-script-install.log 2>&1
-
-        echo "      - docker-ce version is now:"
-        DOCKERV=$(docker -v)
-        echo "          "${DOCKERV}
-        sleep 3s
-
-        if [[ "$OS" == 2 ]]; then
-            echo "    5. Starting Docker Service"
-            sudo systemctl docker start >> ~/docker-script-install.log 2>&1
-        fi
-
-    fi
-        
-    
-    #######################################################
-    ###              Install for CentOS 7 or 8          ###
-    #######################################################
-    if [[ "$OS" == "1" ]]; then
-        if [[ "$DOCK" == [yY] ]]; then
-            echo "    1. Updating System Packages..."
-            sudo yum check-update >> ~/docker-script-install.log 2>&1
-
-            echo "    2. Installing Prerequisite Packages..."
-            sudo dnf install git curl wget -y >> ~/docker-script-install.log 2>&1
-
-            echo "    3. Installing Docker-CE (Community Edition)..."
-
-            sleep 2s
-            (curl -fsSL https://get.docker.com/ | sh) >> ~/docker-script-install.log 2>&1
-
-            echo "    4. Starting the Docker Service..."
-
-            sleep 2s
-
-
-            sudo systemctl start docker >> ~/docker-script-install.log 2>&1
-
-            echo "    5. Enabling the Docker Service..."
-            sleep 2s
-
-            sudo systemctl enable docker >> ~/docker-script-install.log 2>&1
-
-            echo "      - docker version is now:"
-            DOCKERV=$(docker -v)
-            echo "        "${DOCKERV}
-            sleep 3s
-        fi
-    fi
-
-    #######################################################
-    ###               Install for Arch Linux            ###
-    #######################################################
-
-    if [[ "$OS" == "5" ]]; then
-        read -rp "Do you want to install system updates prior to installing Docker-CE? (y/n): " UPDARCH
-        if [[ "UPDARCH" == [yY] ]]; then
-            echo "    1. Installing System Updates... this may take a while...be patient."
-            (sudo pacman -Syu) > ~/docker-script-install.log 2>&1 &
-            ## Show a spinner for activity progress
-            pid=$! # Process Id of the previous running command
-            spin='-\|/'
-            i=0
-            while kill -0 $pid 2>/dev/null
-            do
-                i=$(( (i+1) %4 ))
-                printf "\r${spin:$i:1}"
-                sleep .1
-            done
-            printf "\r"
-        else
-            echo "    1. Skipping system update..."
-            sleep 2s
-        fi
-
-        echo "    2. Installing Prerequisit Packages..."
-        sudo pacman -Sy git curl wget >> ~/docker-script-install.log 2>&1
-
-        echo "    3. Installing Docker-CE (Community Edition)..."
-            sleep 2s
-
-            curl -fsSL https://get.docker.com | sh >> ~/docker-script-install.log 2>&1
-
-            echo "    - docker-ce version is now:"
-            DOCKERV=$(docker -v)
-            echo "        "${DOCKERV}
-            sleep 3s
-    fi
+    echo "      - Docker-CE version is now:"
+    DOCKERV=$(docker -v)
+    echo "          ${DOCKERV}"
+    sleep 3s
 
     if [[ "$DOCK" == [yY] ]]; then
-        # add current user to docker group so sudo isn't needed
         echo ""
-        echo "  - Attempting to add the currently logged in user to the docker group..."
-
+        echo "  - Adding the currently logged in user to the docker group..."
         sleep 2s
         sudo usermod -aG docker "${USER}" >> ~/docker-script-install.log 2>&1
         echo "  - You'll need to log out and back in to finalize the addition of your user to the docker group."
         echo ""
-        echo ""
         sleep 3s
     fi
 
-    if [[ "$DCOMP" = [yY] ]]; then
+    if [[ "$DCOMP" == [yY] ]]; then
         echo "############################################"
         echo "######     Install Docker-Compose     ######"
         echo "############################################"
-
-        # install docker-compose
         echo ""
-        echo "    1. Installing Docker-Compose..."
+        echo "    1. Installing Docker Compose..."
         echo ""
         echo ""
         sleep 2s
 
-        ######################################
-        ###     Install Debian / Ubuntu    ###
-        ######################################        
-        
-        if [[ "$OS" == "2" || "$OS" == "3" || "$OS" == "4" ]]; then
-            sudo apt install docker-compose -y >> ~/docker-script-install.log 2>&1
-        fi
-
-        ######################################
-        ###        Install CentOS 7 or 8   ###
-        ######################################
-
-        if [[ "$OS" == "1" ]]; then
-            sudo curl -L "https://github.com/docker/compose/releases/download/1.23.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose >> ~/docker-script-install.log 2>&1
-
-            sudo chmod +x /usr/local/bin/docker-compose >> ~/docker-script-install.log 2>&1
-        fi
-
-        ######################################
-        ###        Install Arch Linux      ###
-        ######################################
-
-        if [[ "$OS" == "5" ]]; then
-            sudo pacman -Sy >> ~/docker-script-install.log 2>&1
-            sudo pacman -Sy docker-compose > ~/docker-script-install.log 2>&1
-        fi
-
-        echo ""
+        DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -Po '"tag_name": "\K[0-9.]+')
+        sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose >> ~/docker-script-install.log 2>&1
+        sudo chmod +x /usr/local/bin/docker-compose
+        sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 
         echo "      - Docker Compose Version is now: " 
         DOCKCOMPV=$(docker-compose --version)
-        echo "        "${DOCKCOMPV}
-        echo ""
+        echo "        ${DOCKCOMPV}"
         echo ""
         sleep 3s
-    fi
-
-    ##########################################
-    #### Test if Docker Service is Running ###
-    ##########################################
-    ISACT=$( (sudo systemctl is-active docker ) 2>&1 )
-    if [[ "$ISACt" != "active" ]]; then
-        echo "Giving the Docker service time to start..."
-        while [[ "$ISACT" != "active" ]] && [[ $X -le 10 ]]; do
-            sudo systemctl start docker >> ~/docker-script-install.log 2>&1
-            sleep 10s &
-            pid=$! # Process Id of the previous running command
-            spin='-\|/'
-            i=0
-            while kill -0 $pid 2>/dev/null
-            do
-                i=$(( (i+1) %4 ))
-                printf "\r${spin:$i:1}"
-                sleep .1
-            done
-            printf "\r"
-            ISACT=`sudo systemctl is-active docker`
-            let X=X+1
-            echo "$X"
-        done
     fi
 
     if [[ "$NPM" == [yY] ]]; then
@@ -274,26 +130,43 @@ startInstall()
         echo "###     Install NGinX Proxy Manager    ###"
         echo "##########################################"
     
-        # pull an nginx proxy manager docker-compose file from github
         echo "    1. Pulling a default NGinX Proxy Manager docker-compose.yml file."
 
-        mkdir -p docker/nginx-proxy-manager
-        cd docker/nginx-proxy-manager
+        mkdir -p ~/docker/nginx-proxy-manager
+        cd ~/docker/nginx-proxy-manager
 
-        curl https://gitlab.com/bmcgonag/docker_installs/-/raw/main/docker_compose.nginx_proxy_manager.yml -o docker-compose.yml >> ~/docker-script-install.log 2>&1
+        cat <<EOF > docker-compose.yml
+version: '3'
+services:
+  app:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    environment:
+      DB_MYSQL_HOST: "db"
+      DB_MYSQL_PORT: 3306
+      DB_MYSQL_USER: "npm"
+      DB_MYSQL_PASSWORD: "npm"
+      DB_MYSQL_NAME: "npm"
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+  db:
+    image: 'mariadb:latest'
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 'npm'
+      MYSQL_DATABASE: 'npm'
+      MYSQL_USER: 'npm'
+      MYSQL_PASSWORD: 'npm'
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+EOF
 
-        echo "    2. Running the docker-compose.yml to install and start NGinX Proxy Manager"
-        echo ""
-        echo ""
-
-        if [[ "$OS" == "1" ]]; then
-          docker-compose up -d
-        fi
-
-        if [[ "$OS" != "1" ]]; then
-          sudo docker-compose up -d
-        fi
-
+        sudo docker-compose up -d
         echo ""
         echo ""
         echo "    Navigate to your server hostname / IP address on port 81 to setup"
@@ -302,7 +175,6 @@ startInstall()
         echo "    The default login credentials for NGinX Proxy Manager are:"
         echo "        username: admin@example.com"
         echo "        password: changeme"
-
         echo ""       
         sleep 3s
         cd
@@ -322,7 +194,6 @@ startInstall()
         echo ""
         echo ""
         echo "    Navigate to your server hostname / IP address on port 9000 and create your admin account for Portainer-CE"
-
         echo ""
         echo ""
         echo ""
@@ -348,39 +219,6 @@ startInstall()
         sleep 3s
     fi
 
-    if [[ "$NAVID" == [yY] ]]; then
-        echo "###########################################"
-        echo "###        Installing Navidrome         ###"
-        echo "###########################################"
-        echo ""
-        echo "    1. Preparing to install Navidrome"
-
-        mkdir -p docker/navidrome
-        cd docker/navidrome
-
-        curl https://gitlab.com/bmcgonag/docker_installs/-/raw/main/docker_compose_navidrome.yml -o docker-compose.yml >> ~/docker-script-install.log 2>&1
-
-        echo "    2. Running the docker-compose.yml to install and start Navidrome"
-        echo ""
-        echo ""
-
-        if [[ "$OS" == "1" ]]; then
-          docker-compose up -d
-        fi
-
-        if [[ "$OS" != "1" ]]; then
-          sudo docker-compose up -d
-        fi
-
-        echo ""
-        echo ""
-        echo "    Navigate to your server hostname / IP address on port 4533 to setup"
-        echo "    your new Navidrome admin account."
-        echo ""      
-        sleep 3s
-        cd
-    fi
-
     exit 1
 }
 
@@ -393,29 +231,4 @@ echo "Let's figure out which OS / Distro you are running."
 echo ""
 echo ""
 echo "    From some basic information on your system, you appear to be running: "
-echo "        --  OpSys        " $(lsb_release -i)
-echo "        --  Desc:        " $(lsb_release -d)
-echo "        --  OSVer        " $(lsb_release -r)
-echo "        --  CdNme        " $(lsb_release -c)
-echo ""
-echo "------------------------------------------------"
-echo ""
-PS3="Please select the number for your OS / distro: "
-select _ in \
-    "CentOS 7 / 8 / Fedora" \
-    "Debian 10 / 11" \
-    "Ubuntu 18.04" \
-    "Ubuntu 20.04 / 21.04 / 22.04" \
-    "Arch Linux" \
-    "End this Installer"
-do
-  case $REPLY in
-    1) installApps ;;
-    2) installApps ;;
-    3) installApps ;;
-    4) installApps ;;
-    5) installApps ;;
-    6) exit ;;
-    *) echo "Invalid selection, please try again..." ;;
-  esac
-done
+echo "
